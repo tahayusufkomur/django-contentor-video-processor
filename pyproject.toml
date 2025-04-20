@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "django-contentor-video-processor"
+version = "0.8.7"
+description = "A reusable Django app for integrating video processing capabilities to your video models"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+  { name="Taha Yusuf Kömür", email="tahayusufkomur@gmail.com" }
+]
+dependencies = [
+  "django>=3.2"
+]
+
+[project.urls]
+Homepage = "https://github.com/tahayusufkomur/django-contentor-video-processor"

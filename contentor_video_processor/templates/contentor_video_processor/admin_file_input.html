@@ -1,0 +1,141 @@
+{% load i18n %}
+<script>
+
+//check that variable exists
+if (typeof djangoAdminResumableFieldListenerSetUp=="undefined")
+{
+    {#  var is used instead of let to provide expected scope of view #}
+  var djangoAdminResumableFieldListenerSetUp = false;
+}
+
+
+(function($) {
+    function setupField(elementId) {
+
+        console.log('setting up '+ elementId);
+
+        $('form').submit(function() {
+            if($(this).hasClass(elementId + '_disabled')) {
+                alert("File upload is still in progress.")  //FIXME: fires several alerts for each file
+                return false;
+            }
+        });
+
+        if (!(new Resumable().support)) {
+            alert("No uploader support");
+        }
+        var r = new Resumable({
+            target: '{% url 'contentor_video_processor' %}',
+            chunkSize: {{ chunk_size }},
+            query: {
+                csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
+                field_name: '{{ field_name }}',                 {# FIXME: this probably should be checked at run time for added inlines #}
+                content_type_id: '{{ content_type_id }}'        {# FIXME: this probably should be checked at run time for added inlines #}
+            },
+            simultaneousUploads: {{ simultaneous_uploads }}, //3 is better, 1 is used for local testing;
+        });
+        r.assignBrowse($('#' + elementId + '_input_file'));
+        r.on('fileAdded', function(file) {
+            r.upload();
+            $("#" + elementId + "_uploaded_status").html(file.fileName + ' ⏳ Uploading... ');
+            {#console.log(file)#}
+            $("form").addClass(elementId + "_disabled");
+        });
+        r.on('fileSuccess', function(file, message) {
+
+            ///check that the name of the file is returned and not "chunk uploaded"
+            if(message.toLowerCase().includes("chunk uploaded"))
+            {
+                //this means some upload error occured - that happens occasionaly (not sure why yet)
+                //in this case the file was actually not fully uploaded and saving the form
+                //will fail
+                //TODO: fix this case properly. I cannot find a patter to reproduce it
+
+                //set value to null, so the form won;t try to save the file
+                $('#'+elementId).val("");
+                $("#" + elementId + "_uploaded_status").html(message + ' ❌ Error while uploading - please re-upload this file');
+            }
+            else {
+                $('#'+elementId).val(message);
+                $("#" + elementId + "_uploaded_status").html(message + ' ✅ Uploaded');
+            }
+            // console.log("fileSuccess fired " + file + " " + message)
+
+            $("form").removeClass(elementId + "_disabled");
+
+        });
+        r.on('fileError', function(file, message) {
+            $("#" + elementId + "_uploaded_status").html(message);
+        });
+        r.on('progress', function(file, message) {
+            let progress = r.progress();
+            if(progress==0)
+            {
+                //don't show 0 if there is any progress but server does not report actual progress
+                //show something at least so user won't be confused
+                progress=0.05;
+            }
+            $('#' + elementId + '_progress').val(progress);
+        });
+
+    }
+
+    //fire on DOMReady
+    $(function(){
+        {% comment %}
+        id here is the one that is known upon page generation.
+        For new inlines it will be replace with a placeholder that will be updated by page js.
+        That's why we use formset:added event - to get the actual id that is generated
+        by django-admin's inlines.js code
+        {% endcomment %}
+        //FIXME: don't execute if id contains "__prefix__" - django's placeholder for id
+        setupField('{{ id }}');
+    });
+
+    //should be set up once
+    if(!djangoAdminResumableFieldListenerSetUp)
+    {
+        //setup admin inline creation listener so we can get the id of created fields instead
+        // of a placeholder stored in { id } for new fields
+        $(document).on('formset:added', function(event, $row, formsetName) {
+            //check if there are resumable fields and set them up with their actual ids
+            $row.find('input.django-admin-resumable-file').each(
+                function () {
+                    let el = $(this);
+                    let strippedId = el.attr('id').replace('_input_file', '');
+                    setupField(strippedId)
+                }
+            )
+        });
+
+        djangoAdminResumableFieldListenerSetUp = true;
+    }
+
+})(typeof django !== "undefined" ? django.jQuery : jQuery);
+
+
+</script>
+<div id="container">
+    <p class="file-upload">
+        {% if value %}
+            {% trans 'Currently' %}:
+            {% if file_url %}
+                <a id="{{ id }}_link" target="_new" href="{{ file_url }}">{{ file_name }}</a>
+                {% if show_thumb %}
+                    <img src="{{ file_url }}" style="width:250px;">
+                {% endif %}
+            {% else %}
+                {{ value }}
+            {% endif %}
+            {{ clear_checkbox }}
+            <br>
+            {% trans 'Change' %}:
+        {% endif %}
+
+        <span id="{{ id }}_uploaded_status"></span>
+        <input type="file" id="{{ id }}_input_file" class="django-admin-resumable-file">
+    </p>
+    <progress id="{{ id }}_progress" value="0" max="1" style="width:500px"></progress>
+</div>
+
+<input type="hidden" name="{{ name }}" id="{{ id }}" value="{{ value }}">

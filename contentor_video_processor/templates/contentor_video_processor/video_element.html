@@ -1,0 +1,348 @@
+<div class="video-player-wrapper">
+    <div class="video-container">
+        <video id="videoPlayer" controls controlsList="nodownload" class="video-player">
+            <source id="videoSource" src="{{ video.video.url }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+
+        <!-- Gearbox quality settings overlay -->
+        <div class="video-controls-overlay">
+            <div class="gearbox-container">
+                <button id="qualityBtn" class="gearbox-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span class="current-quality">Original</span>
+                </button>
+                <div id="qualityMenu" class="quality-menu">
+                    <!-- Quality options will be dynamically added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .video-player-wrapper {
+        position: relative;
+        width: 100%;
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+
+    .video-container {
+        position: relative;
+        width: 100%;
+    }
+
+    .video-player {
+        width: 100%;
+        display: block;
+        border-radius: 8px;
+    }
+
+    .video-controls-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        opacity: 1;
+        transition: opacity 0.3s ease;
+    }
+
+    /* Make sure the controls remain visible in fullscreen mode */
+    .video-player::-webkit-media-controls {
+        z-index: 5; /* Ensure native controls are below our custom controls */
+    }
+
+    .gearbox-container {
+        position: relative;
+    }
+
+    .gearbox-btn {
+        display: flex;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .gearbox-btn:hover {
+        background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    .gearbox-btn svg {
+        margin-right: 5px;
+    }
+
+    .quality-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background-color: rgba(0, 0, 0, 0.8);
+        border-radius: 4px;
+        margin-top: 5px;
+        padding: 5px 0;
+        display: none;
+        width: 100px;
+        z-index: 20;
+    }
+
+    .quality-option {
+        color: white;
+        padding: 8px 12px;
+        cursor: pointer;
+        text-align: center;
+    }
+
+    .quality-option:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .quality-option.active {
+        font-weight: bold;
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .countdown-notification {
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        text-align: center;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+
+    /* Handle fullscreen mode specifically */
+    :fullscreen .video-controls-overlay {
+        opacity: 0;
+    }
+
+    :fullscreen .video-container:hover .video-controls-overlay {
+        opacity: 1;
+    }
+
+    /* For older browsers */
+    :-webkit-full-screen .video-controls-overlay {
+        opacity: 0;
+    }
+
+    :-webkit-full-screen .video-container:hover .video-controls-overlay {
+        opacity: 1;
+    }
+
+    :-moz-full-screen .video-controls-overlay {
+        opacity: 0;
+    }
+
+    :-moz-full-screen .video-container:hover .video-controls-overlay {
+        opacity: 1;
+    }
+
+    :-ms-fullscreen .video-controls-overlay {
+        opacity: 0;
+    }
+
+    :-ms-fullscreen .video-container:hover .video-controls-overlay {
+        opacity: 1;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const videoPlayer = document.getElementById('videoPlayer');
+    const videoSource = document.getElementById('videoSource');
+    const qualityBtn = document.getElementById('qualityBtn');
+    const qualityMenu = document.getElementById('qualityMenu');
+    const currentQualitySpan = document.querySelector('.current-quality');
+
+    // Available video quality options (we'll store just the field names, not the URLs)
+    const availableQualities = {
+        'original': {% if video.video %} true {% else %} false {% endif %},
+        '720p': {% if video.video_720p %} true {% else %} false {% endif %},
+        '480p': {% if video.video_480p %} true {% else %} false {% endif %},
+        '360p': {% if video.video_360p %} true {% else %} false {% endif %}
+    };
+
+    // Store current time and playing state
+    let currentTime = 0;
+    let isPlaying = false;
+
+    // Initialize the quality menu
+    function initQualityMenu() {
+        // Clear existing options
+        qualityMenu.innerHTML = '';
+
+        // Add each quality option to the menu
+        Object.keys(availableQualities).forEach(quality => {
+            if (!availableQualities[quality]) return; // Skip if quality not available
+
+            const option = document.createElement('div');
+            option.className = 'quality-option';
+            option.setAttribute('data-quality', quality);
+
+            // Format the display text
+            let displayText = quality;
+            if (quality === 'original') {
+                displayText = 'Original';
+            } else {
+                displayText = quality.toUpperCase();
+            }
+
+            option.textContent = displayText;
+
+            if (quality === 'original') {
+                option.classList.add('active');
+            }
+
+            option.addEventListener('click', function() {
+                changeVideoQuality(quality);
+            });
+
+            qualityMenu.appendChild(option);
+        });
+    }
+
+    // Fetch a fresh signed URL for the requested quality
+    async function getSignedUrl(quality) {
+        try {
+            // Make a request to a new endpoint to get a fresh signed URL
+            const response = await fetch(`/contentor-video/videos/{{ video.id }}/signed-url/${quality}/`);
+
+            if (!response.ok) {
+                throw new Error(`Failed to get signed URL: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.url;
+        } catch (error) {
+            console.error('Error fetching signed URL:', error);
+            return null;
+        }
+    }
+
+    // Change video quality
+    async function changeVideoQuality(quality) {
+        if (!availableQualities[quality]) return;
+
+        // Store current playback state and time
+        currentTime = videoPlayer.currentTime;
+        isPlaying = !videoPlayer.paused;
+
+        // Show loading indicator or disable controls temporarily
+        videoPlayer.controls = false;
+
+        try {
+            let url;
+            if (quality === 'original') {
+                // For the original quality, we can use the initial URL or fetch a fresh one
+                if (videoSource.getAttribute('data-original-url')) {
+                    url = videoSource.getAttribute('data-original-url');
+                } else {
+                    // Save the original URL for future use
+                    videoSource.setAttribute('data-original-url', videoSource.src);
+                    url = videoSource.src;
+                }
+            } else {
+                // For other qualities, fetch a fresh signed URL
+                url = await getSignedUrl(quality);
+                if (!url) {
+                    throw new Error(`Could not get signed URL for ${quality}`);
+                }
+            }
+
+            // Update source and load new video
+            videoSource.src = url;
+            videoPlayer.load();
+
+            // Restore playback position and state
+            videoPlayer.addEventListener('loadedmetadata', function onceLoaded() {
+                videoPlayer.currentTime = currentTime;
+                videoPlayer.controls = true;
+                if (isPlaying) {
+                    videoPlayer.play();
+                }
+                videoPlayer.removeEventListener('loadedmetadata', onceLoaded);
+            });
+
+            // Update UI
+            currentQualitySpan.textContent = quality === 'original' ? 'Original' : quality.toUpperCase();
+
+            // Update active class in menu
+            const options = qualityMenu.querySelectorAll('.quality-option');
+            options.forEach(opt => {
+                if (opt.getAttribute('data-quality') === quality) {
+                    opt.classList.add('active');
+                } else {
+                    opt.classList.remove('active');
+                }
+            });
+        } catch (error) {
+            console.error('Error changing video quality:', error);
+            // Re-enable controls and show error message
+            videoPlayer.controls = true;
+            // Optionally show an error message to the user
+        }
+
+        // Hide menu after selection
+        qualityMenu.style.display = 'none';
+    }
+
+    // Toggle quality menu
+    qualityBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (qualityMenu.style.display === 'block') {
+            qualityMenu.style.display = 'none';
+        } else {
+            qualityMenu.style.display = 'block';
+        }
+    });
+
+    // Hide menu when clicking elsewhere
+    document.addEventListener('click', function() {
+        qualityMenu.style.display = 'none';
+    });
+
+    // Prevent menu from closing when clicking inside it
+    qualityMenu.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+
+    // Hide controls when video is inactive (except for fullscreen)
+    let controlsTimeout;
+    const videoContainer = document.querySelector('.video-container');
+
+    videoContainer.addEventListener('mousemove', function() {
+        const controlsOverlay = document.querySelector('.video-controls-overlay');
+        controlsOverlay.style.opacity = '1';
+
+        clearTimeout(controlsTimeout);
+        controlsTimeout = setTimeout(function() {
+            if (!qualityMenu.contains(document.activeElement) &&
+                qualityMenu.style.display !== 'block') {
+                controlsOverlay.style.opacity = '0';
+            }
+        }, 3000);
+    });
+
+    videoContainer.addEventListener('mouseleave', function() {
+        if (!qualityMenu.contains(document.activeElement) &&
+            qualityMenu.style.display !== 'block') {
+            document.querySelector('.video-controls-overlay').style.opacity = '0';
+        }
+    });
+
+    // Save the original URL for reference
+    videoSource.setAttribute('data-original-url', videoSource.src);
+
+    // Initialize quality menu
+    initQualityMenu();
+});
+</script>

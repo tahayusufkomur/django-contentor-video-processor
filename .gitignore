@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+*.pyo
+
+# Build artifacts
+build/
+dist/
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+
+# PyCharm / VSCode
+.idea/
+.vscode/
+*.swp
+
+# Environment
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# macOS
+.DS_Store
+
+# Test coverage
+.coverage
+htmlcov/
+.cache/
