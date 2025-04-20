@@ -2,6 +2,25 @@
 
 A Django app for programmatically creating different video resolutions, compressing videos, and reducing storage and bandwidth costs without sacrificing quality. Reduce video sizes dramatically (e.g., from 1GB to 100MB) while maintaining visual quality.
 
+## Preview
+
+Below are screenshots that demonstrate the key features and interfaces of the Contentor Video Processor Demo:
+
+*The video uploaded with chunks to prevent timeout or memory leak*
+![Video Upload Interface](/docs/upload.gif)
+
+*Contentor dashboard for realtime monitoring*
+![Results Dashboard](/docs/contentor-dashboard.png)
+
+*Status Table in the beginning admin panel*
+![Status Table](/docs/status-table-1.png)
+
+*Status Table after complete in the admin panel*
+![Status Table](/docs/status-table-2.png)
+
+*Built-in player with resolution settings*
+![Video Player](/docs/video_player.gif)
+
 ## Features
 
 - Chunk upload support for large video files (10GB+ files can be uploaded with proper settings)
