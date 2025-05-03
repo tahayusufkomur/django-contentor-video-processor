@@ -47,7 +47,7 @@ pip install django-contentor-video-processor
 
 ## Quick Start
 
-### 1. Add to INSTALLED_APPS
+### 1. Add to INSTALLED_APPS and Context Processors
 
 Add `contentor_video_processor` to your `INSTALLED_APPS` in `settings.py`:
 
@@ -56,6 +56,21 @@ INSTALLED_APPS = [
     # ...
     'contentor_video_processor',
     # ...
+]
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                ...,
+                "contentor_video_processor.context_processor.video_resolutions",
+                ...,
+            ],
+        },
+    },
 ]
 ```
 
