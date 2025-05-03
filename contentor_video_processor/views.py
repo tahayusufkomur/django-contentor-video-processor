@@ -9,8 +9,6 @@ from django.shortcuts import get_object_or_404
 from django.utils.functional import cached_property
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import View
-
-from contentor_video_processor.decorators import login_required_if_setting
 from contentor_video_processor.files import ResumableFile
 from contentor_video_processor.models import VideoProcessingRequest
 
@@ -54,7 +52,8 @@ class UploadView(View):
 
 contentor_video = login_required(csrf_exempt(UploadView.as_view()))
 
-@login_required_if_setting
+
+@login_required
 def get_video_signed_url(request, video_id, quality):
     """
     Get a fresh signed URL for a specific video quality

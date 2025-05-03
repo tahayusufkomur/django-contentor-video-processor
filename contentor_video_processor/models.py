@@ -1,5 +1,7 @@
 from urllib.parse import urlparse, unquote
 
+import boto3
+import requests
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -9,6 +11,19 @@ from django.utils.safestring import mark_safe
 from contentor_video_processor.fields import FormResumableFileField
 from contentor_video_processor.functions import process_video, get_webhook_url, replace_file_format
 from contentor_video_processor.widgets import ResumableAdminWidget
+
+
+def get_s3_client(access_key, secret_key, endpoint_url=None):
+    s3_args = {
+        "aws_access_key_id": access_key,
+        "aws_secret_access_key": secret_key,
+    }
+
+    # Only add endpoint_url if it's provided
+    if endpoint_url:
+        s3_args["endpoint_url"] = endpoint_url
+
+    return boto3.client("s3", **s3_args)
 
 
 class AsyncFileField(models.FileField):
@@ -47,9 +62,168 @@ class ContentorVideoField(AsyncFileField):
 
 
 class ContentorVideoModelMixin(models.Model):
-
     class Meta:
         abstract = True
+
+    def sync_video_resolutions(self):
+        """
+        Sync video resolutions with external storage and database.
+        Checks if resolution files exist in storage and creates/updates processing requests accordingly.
+        """
+        # Get the video field dynamically
+        video_field_name = self.get_video_file_field()
+        if not video_field_name:
+            return
+
+        video_field = getattr(self, video_field_name)
+        if not video_field:
+            return
+
+        # Get video URL and parse it
+        video_url = video_field.url
+        video_parsed = urlparse(video_url)
+
+        aws_location = getattr(settings, "AWS_LOCATION", None)
+        original_path = f"{aws_location}/{video_field.name}" if aws_location else video_field.name
+
+
+        # Get configuration
+        contentor_config = getattr(settings, "CONTENTOR_VIDEO_PROCESSING_CONFIG", {})
+        resolutions = contentor_config.get("resolutions", ["original"])
+
+        video_processing_request_model = get_video_processing_request_model()
+
+        # Process each resolution
+        for resolution in resolutions:
+            # Replace "original" with the resolution in the path
+            check_path = original_path.replace("original", resolution)
+
+            # Create a signed URL for checking existence
+            output_file_size_mb = self._check_file_exists(check_path)
+
+            # Get the most recent processing request for this resolution
+            existing_request = (
+                video_processing_request_model.objects
+                .filter(video=self, resolution=resolution)
+                .order_by("-id")
+                .first()
+            )
+
+            # Prepare URLs
+            download_url = video_field.url.split('?')[0]  # do not take the signature part
+            upload_url = f"{video_parsed.scheme}://{video_parsed.netloc}/{original_path}"
+
+            if output_file_size_mb:
+                if resolution != "original":
+                    # Check if there's a field for this resolution
+                    resolution_field_name = f"{video_field_name}_{resolution}"
+                    if hasattr(self, resolution_field_name):
+                        # Update the resolution field if it exists
+                        resolution_field = getattr(self, resolution_field_name)
+                        if hasattr(resolution_field, 'name'):
+                            resolution_field.name = video_field.name.replace("original", resolution)
+                            self.save(update_fields=[resolution_field_name], skip_processing=True)
+
+                resolution = contentor_config.get("original_resolution",
+                                                  "1080p") if resolution == "original" else resolution
+
+                # Create or update processing request with skip_process=True
+                if existing_request:
+                    # Update existing request if needed
+                    if existing_request.status != "completed":
+                        existing_request.status = "completed"
+                        existing_request.save(skip_process=True)
+                else:
+                    # First create the instance without saving
+                    video_processing_request = video_processing_request_model(
+                        video=self,
+                        resolution=resolution,
+                        download_url=download_url,
+                        upload_url=upload_url,
+                        output_file_size_mb=output_file_size_mb,
+                        download_provider=contentor_config.get("download_provider", "aws"),
+                        upload_provider=contentor_config.get("upload_provider", "aws"),
+                        webhook_url=getattr(settings, "CONTENTOR_WEBHOOK_URL", get_webhook_url()),
+                        history={},
+                        status="completed",
+                    )
+                    # Then save it with skip_process=True
+                    video_processing_request.save(skip_process=True)
+            else:
+                # File doesn't exist in storage
+                if not existing_request or existing_request.status not in ["pending", "processing"]:
+                    # Create new processing request without skipping
+                    pass
+                    video_processing_request_model.objects.create(
+                        video=self,
+                        resolution=resolution,
+                        download_url=download_url,
+                        upload_url=upload_url,
+                        download_provider=contentor_config.get("download_provider", "aws"),
+                        upload_provider=contentor_config.get("upload_provider", "aws"),
+                        webhook_url=getattr(settings, "CONTENTOR_WEBHOOK_URL", get_webhook_url()),
+                        history={},
+                    )
+
+    def _check_file_exists(self, path):
+        """
+        Check if a file exists in S3 using direct boto3 client
+        """
+        from botocore.exceptions import ClientError
+
+        try:
+            # Remove leading slash from path
+            s3_key = path.lstrip("/")
+
+            # Get AWS credentials from settings
+            aws_access_key = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
+            aws_secret_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
+            aws_bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
+            aws_endpoint = getattr(settings, 'AWS_S3_ENDPOINT_URL', None)
+
+            if not all([aws_access_key, aws_secret_key, aws_bucket_name]):
+                return False
+
+            # Create S3 client
+            s3_client = get_s3_client(
+                aws_access_key,
+                aws_secret_key,
+                aws_endpoint
+            )
+
+            # Use head_object to check if the file exists
+            head_object = s3_client.head_object(Bucket=aws_bucket_name, Key=s3_key)
+            # Get size in bytes from the response
+            size_in_bytes = head_object['ContentLength']
+
+            # Convert to megabytes
+            size_in_mb = size_in_bytes / (1024 * 1024)
+
+            return size_in_mb
+
+        except ClientError as e:
+            # If error code is 404, the file doesn't exist
+            if e.response['Error']['Code'] == '404':
+                return False
+            # For other errors, log and return False
+            print(f"Error checking file existence: {e}")
+            return False
+        except Exception as e:
+            # Log the error if needed
+            print(f"Error checking file existence: {e}")
+            return False
+
+    def sync_selected_videos(self, video_queryset=None):
+        """
+        Class method to sync multiple videos.
+        Can be called on a queryset or collection of video objects.
+        """
+        if video_queryset is None:
+            video_queryset = [self]
+
+        for video in video_queryset:
+            if hasattr(video, 'sync_video_resolutions'):
+                video.sync_video_resolutions()
 
     def get_video_file_field(self):
         for field in self._meta.fields:
@@ -58,10 +232,14 @@ class ContentorVideoModelMixin(models.Model):
         return None
 
     def create_video_processing_objects(self):
-        if not self.video:
+        video_field_name = self.get_video_file_field()
+        if not video_field_name:
             return
 
-        video_url = self.video.url
+        video_field = getattr(self, video_field_name)
+        if not video_field:
+            return
+        video_url = video_field.url
 
         video_parsed = urlparse(video_url)
         original_path = unquote(video_parsed.path)
@@ -101,7 +279,6 @@ class ContentorVideoModelMixin(models.Model):
         cells = []
 
         contentor_config = getattr(settings, "CONTENTOR_VIDEO_PROCESSING_CONFIG", {})
-
 
         for res in resolutions:
             # Map 'original' to None if your model stores it that way
@@ -147,11 +324,14 @@ class ContentorVideoModelMixin(models.Model):
         if self.pk and video_field:
             old = self.__class__.objects.get(pk=self.pk)
             file_has_changed = getattr(old, video_field) != getattr(self, video_field)
-        super().save(*args, **kwargs)
 
         if is_new or file_has_changed:
+            # Here you can add code to handle the file change
+            # For example, trigger transcoding for each resolution
             if not skip_processing:
                 self.create_video_processing_objects()
+        super().save(*args, **kwargs)
+
 
 # MetaClass to handle dynamic field creation
 class ContentorVideoModelBase(models.base.ModelBase):
@@ -194,9 +374,9 @@ class ContentorVideoModelBase(models.base.ModelBase):
 
 
 class ContentorVideoModel(ContentorVideoModelMixin, models.Model, metaclass=ContentorVideoModelBase):
-
     class Meta:
         abstract = True
+
 
 class AbstractVideoProcessingRequest(models.Model):
     uuid = models.UUIDField(blank=True, null=True, editable=False)
@@ -258,6 +438,9 @@ def get_video_processing_request_model():
     app_label = settings.CONTENTOR_VIDEO_PROCESSING_REQUESTS_APP
     return apps.get_model(app_label, "VideoProcessingRequest")
 
+
 class VideoProcessingRequest(AbstractVideoProcessingRequest):
     class Meta:
         app_label = settings.CONTENTOR_VIDEO_PROCESSING_REQUESTS_APP
+        verbose_name = settings.CONTENTOR_PROCESSING_REQUEST_MODEL_VERBOSE_NAME
+        verbose_name_plural = settings.CONTENTOR_PROCESSING_REQUEST_MODEL_VERBOSE_NAME_PLURAL
