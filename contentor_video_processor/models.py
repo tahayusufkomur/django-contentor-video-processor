@@ -325,12 +325,13 @@ class ContentorVideoModelMixin(models.Model):
             old = self.__class__.objects.get(pk=self.pk)
             file_has_changed = getattr(old, video_field) != getattr(self, video_field)
 
+        super().save(*args, **kwargs)  # save the instance first
+
         if is_new or file_has_changed:
             # Here you can add code to handle the file change
             # For example, trigger transcoding for each resolution
             if not skip_processing:
                 self.create_video_processing_objects()
-        super().save(*args, **kwargs)
 
 
 # MetaClass to handle dynamic field creation
