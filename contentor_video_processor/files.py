@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 import fnmatch
 import logging
+import os
 import shutil
 import tempfile
 import time
 
+from django.conf import settings
+
+from contentor_video_processor.models import get_s3_client
 from django.core.files import File
 from django.utils.functional import cached_property
 
@@ -125,6 +129,64 @@ class ResumableFile(object):
         outfile.seek(0)
         logger.info(f"All chunks merged in {time.time() - start_time:.2f} seconds")
         return outfile
+
+    def file_already_exists(self):
+        """
+        Checks if a file with the same name and size already exists in S3 storage.
+        """
+        try:
+            # Get S3 client
+            client = get_s3_client(
+                access_key=settings.__getattr__("AWS_ACCESS_KEY_ID"),
+                secret_key=settings.__getattr__("AWS_SECRET_ACCESS_KEY"),
+                endpoint_url=settings.__getattr__("AWS_S3_ENDPOINT_URL"),
+            )
+
+            # Extract bucket name and key from storage filename
+            bucket_name = settings.__getattr__("AWS_STORAGE_BUCKET_NAME")
+
+            # Apply AWS location prefix to the key if configured
+            aws_location = settings.__getattr__("AWS_LOCATION")
+
+            # Combine location prefix with storage filename to get the full key
+            if aws_location and not self.storage_filename.startswith(aws_location):
+                key = f"{aws_location.rstrip('/')}/{self.storage_filename}"
+            else:
+                key = self.storage_filename
+
+            # Remove any double slashes that might have been created
+            key = key.replace('//', '/')
+
+            # Extract the expected file size
+            total_size = int(self.params.get("resumableTotalSize"))
+
+            print(f"Checking if file exists in S3: bucket={bucket_name}, key={key}")
+
+            try:
+                # Check if object exists and get its metadata
+                response = client.head_object(Bucket=bucket_name, Key=key)
+
+                # Get content length from response
+                file_size = response.get('ContentLength', 0)
+
+                print(f"Existing file found in S3: {key}, size: {file_size}, expected: {total_size}")
+
+                # Compare sizes
+                return file_size == total_size
+
+            except client.exceptions.ClientError as e:
+                # If the error code is 404, the object does not exist
+                if e.response['Error']['Code'] == '404':
+                    print(f"File does not exist in S3: {key}")
+                    return False
+                else:
+                    # Other errors
+                    print(f"Error checking file existence in S3: {str(e)}")
+                    return False
+
+        except Exception as e:
+            print(f"Error in file_already_exists: {str(e)}")
+            return False
 
     @property
     def filename(self):

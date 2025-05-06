@@ -4,6 +4,7 @@ from .views import get_video_signed_url, webhook_receiver
 
 urlpatterns = [
     re_path(r"^upload/$", views.contentor_video, name="contentor_video_processor"),
+    re_path(r"^file-exists/$", views.contentor_file_exists, name='contentor_file_exists'),
     path(
         "videos/<int:video_id>/signed-url/<str:quality>/",
         get_video_signed_url,

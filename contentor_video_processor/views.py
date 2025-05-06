@@ -12,9 +12,43 @@ from django.views.generic import View
 from contentor_video_processor.files import ResumableFile
 from contentor_video_processor.models import VideoProcessingRequest
 
+class FileExistsView(View):
+    """
+    View to check if a file already exists in storage with the same name and size.
+    This view should be called before starting the upload process to avoid unnecessary uploads.
+    """
+
+    @cached_property
+    def request_data(self):
+        return getattr(self.request, self.request.method)
+
+    @cached_property
+    def model_upload_field(self):
+        content_type = ContentType.objects.get_for_id(
+            self.request_data["content_type_id"]
+        )
+        return content_type.model_class()._meta.get_field(
+            self.request_data["field_name"]
+        )
+
+    def get(self, request, *args, **kwargs):
+        # Create a ResumableFile object with the request parameters
+        r = ResumableFile(
+            self.model_upload_field, user=request.user, params=request.GET
+        )
+
+        # Check if file already exists with same size
+        if r.file_already_exists():
+            print(f"File already exists with same size, skipping upload: {r.filename}")
+            return HttpResponse(r.storage_filename)
+
+        # File doesn't exist or has different size - return 200 status with message
+        return JsonResponse({"exists": False, "message": "File not found"})
+
+contentor_file_exists = login_required(csrf_exempt(FileExistsView.as_view()))
+
 
 class UploadView(View):
-
     @cached_property
     def request_data(self):
         return getattr(self.request, self.request.method)
@@ -66,6 +100,7 @@ class UploadView(View):
         r = ResumableFile(
             self.model_upload_field, user=request.user, params=request.GET
         )
+
         if not r.chunk_exists:
             return HttpResponse("chunk not found", status=404)
         if r.is_complete:
@@ -74,6 +109,7 @@ class UploadView(View):
 
 
 contentor_video = login_required(csrf_exempt(UploadView.as_view()))
+
 
 
 @login_required
