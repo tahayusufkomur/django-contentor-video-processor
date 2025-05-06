@@ -13,6 +13,9 @@
 
         console.log('setting up ' + elementId);
 
+        // Store the file globally so we can access it when overwrite button is clicked
+        let currentFile = null;
+
         $('form').submit(function () {
             if ($(this).hasClass(elementId + '_disabled')) {
                 alert("File upload is still in progress.")  //FIXME: fires several alerts for each file
@@ -35,7 +38,31 @@
             testChunks: false  // Disable the default behavior of testing chunks
         });
         r.assignBrowse($('#' + elementId + '_input_file'));
+
+        // Function to start the upload process
+        function startUpload(file) {
+            r.upload();
+            $("#" + elementId + "_uploaded_status").html(file.fileName + ' ⏳ Uploading... ');
+            $("form").addClass(elementId + "_disabled");
+            // Hide the overwrite button when upload starts
+            $('#' + elementId + '_overwrite_btn');
+        }
+
+        // Function to handle the overwrite button click - use direct binding
+        $('body').on('click', '#' + elementId + '_overwrite_btn', function(e) {
+            e.preventDefault();
+            console.log('Overwrite button clicked for ' + elementId);
+            if (currentFile) {
+                // Add overwrite flag to the query
+                r.opts.query.overwrite = true;
+                startUpload(currentFile);
+            }
+        });
+
         r.on('fileAdded', function (file) {
+            // Store the file for later use with overwrite button
+            currentFile = file;
+
             // First check if file already exists with same name and size
             $.ajax({
                 url: '{% url 'contentor_file_exists' %}',
@@ -55,9 +82,7 @@
 
                         // If response is JSON with exists=false, start upload
                         if (responseData.exists === false) {
-                            r.upload();
-                            $("#" + elementId + "_uploaded_status").html(file.fileName + ' ⏳ Uploading... ');
-                            $("form").addClass(elementId + "_disabled");
+                            startUpload(file);
                             return;
                         }
                     } catch (e) {
@@ -69,7 +94,29 @@
                     const filename = typeof responseData === 'string' ? responseData : responseData.filename;
 
                     $('#' + elementId).val(filename);
-                    $("#" + elementId + "_uploaded_status").html(file.fileName + ' ✅ File already exists, no need to upload');
+
+                    // Clear the status container first
+                    $("#" + elementId + "_uploaded_status").empty();
+
+                    // Add the text and button as separate elements
+                    $("#" + elementId + "_uploaded_status")
+                        .append(file.fileName + ' ✅ File already exists ')
+                        .append($('<button>', {
+                            id: elementId + '_overwrite_btn',
+                            type: 'button',
+                            class: 'button',
+                            text: 'Overwrite',
+                            css: {
+                                'margin-left': '10px',
+                                'background-color': '#d9534f',
+                                'color': 'white',
+                                'border': 'none',
+                                'padding': '5px 10px',
+                                'border-radius': '3px',
+                                'cursor': 'pointer'
+                            }
+                        }));
+
                     $('#' + elementId + '_progress').val(1); // Set progress to complete
                     $("form").removeClass(elementId + "_disabled");
                 },
@@ -77,9 +124,7 @@
                     // Handle error - shouldn't happen with our updated view
                     console.error("Error checking if file exists");
                     // Start upload anyway
-                    r.upload();
-                    $("#" + elementId + "_uploaded_status").html(file.fileName + ' ⏳ Uploading... ');
-                    $("form").addClass(elementId + "_disabled");
+                    startUpload(file);
                 }
             });
         });
@@ -97,10 +142,22 @@
                 }
 
                 $("form").removeClass(elementId + "_disabled");
+                // Reset the overwrite flag
+                if (r.opts.query.overwrite) {
+                    delete r.opts.query.overwrite;
+                }
+                // Hide the overwrite button
+                $('#' + elementId + '_overwrite_btn').hide();
             }, 500);
         });
         r.on('fileError', function (file, message) {
             $("#" + elementId + "_uploaded_status").html(message);
+            // Hide the overwrite button
+            $('#' + elementId + '_overwrite_btn').hide();
+            // Reset the overwrite flag
+            if (r.opts.query.overwrite) {
+                delete r.opts.query.overwrite;
+            }
         });
         r.on('progress', function (file, message) {
             let progress = r.progress();
