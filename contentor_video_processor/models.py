@@ -39,24 +39,18 @@ class AsyncFileField(models.FileField):
 
 
 class ContentorVideoField(AsyncFileField):
-    def __init__(self, *args, allowed_formats=None, max_size_mb=None, resolutions=None, **kwargs):
+    def __init__(self, *args, allowed_formats=None, resolutions=None, **kwargs):
         self.allowed_formats = allowed_formats or []  # Empty = allow anything
-        self.max_size_mb = max_size_mb or 3000  # Default to 3GB
         self.resolutions = resolutions or settings.CONTENTOR_VIDEO_PROCESSING_CONFIG.get("resolutions", ["original"])
         super().__init__(*args, **kwargs)
 
     def clean(self, value, model_instance):
         file = value.file
 
-        # Validate file extension (if specified)
         if self.allowed_formats:
             ext = file.name.split('.')[-1].lower()
             if ext not in self.allowed_formats:
                 raise ValidationError(f"Only files with extensions {', '.join(self.allowed_formats)} are allowed.")
-
-        # Validate file size
-        if file.size > self.max_size_mb * 1024 * 1024:
-            raise ValidationError(f"File size must be smaller than {self.max_size_mb}MB.")
 
         return super().clean(value, model_instance)
 

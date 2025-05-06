@@ -30,13 +30,36 @@ class UploadView(View):
 
     def post(self, request, *args, **kwargs):
         chunk = request.FILES.get("file")
+
+        # Log request information
+        print(f"Received chunk upload request: File size: {chunk.size if chunk else 'None'}")
+        print(f"Request POST params: {request.POST}")
+
         r = ResumableFile(
             self.model_upload_field, user=request.user, params=request.POST
         )
+
+        # Log chunk information
+        print(f"Current chunk: {r.current_chunk_name}")
+        print(f"Is chunk exists: {r.chunk_exists}")
+
         if not r.chunk_exists:
+            print(f"Processing new chunk: {r.current_chunk_name}")
             r.process_chunk(chunk)
+        else:
+            print(f"Chunk already exists, skipping: {r.current_chunk_name}")
+
+        # Log completion status
+        print(f"Checking completion: Current size {r.size}, Total size {request.POST.get('resumableTotalSize')}")
+        print(f"Is complete: {r.is_complete}")
+
         if r.is_complete:
-            return HttpResponse(r.collect())
+            print(f"Upload complete, collecting chunks for file: {r.filename}")
+            filename = r.collect()
+            print(f"File saved as: {filename}")
+            return HttpResponse(filename)
+
+        print(f"Chunk processed, awaiting more chunks for {r.filename}")
         return HttpResponse("chunk uploaded")
 
     def get(self, request, *args, **kwargs):

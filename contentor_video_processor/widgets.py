@@ -29,7 +29,7 @@ class ResumableBaseWidget(FileInput):
             file_url = ""
 
         chunk_size = getattr(settings, "ADMIN_RESUMABLE_CHUNKSIZE", "1*1024*1024")
-        show_thumb = getattr(settings, "ADMIN_RESUMABLE_SHOW_THUMB", True)
+        show_thumb = getattr(settings, "ADMIN_RESUMABLE_SHOW_THUMB", False)
         simultaneous_uploads = getattr(settings, "ADMIN_SIMULTANEOUS_UPLOADS", 1)
 
         content_type_id = ContentType.objects.get_for_model(self.attrs["model"]).id
